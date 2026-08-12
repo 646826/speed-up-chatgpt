@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speed Up ChatGPT</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="header">
+    <h1 class="title">Speed Up ChatGPT</h1>
+    <span id="stateBadge" class="badge badge-off">OFF</span>
+  </header>
+
+  <main id="mainContent" class="content">
+    <section class="row row-toggle">
+      <label for="enabledToggle" class="label">Enable</label>
+      <button id="enabledToggle" class="toggle" type="button" role="switch" aria-checked="true" aria-label="Enable trimming">
+        <span class="toggle-knob"></span>
+      </button>
+    </section>
+
+    <section class="row">
+      <label for="messageLimit" class="label">Visible messages</label>
+      <div class="stepper">
+        <button id="limitMinus" class="step-btn" type="button" aria-label="Decrease visible messages">&minus;</button>
+        <input id="messageLimit" class="step-input" type="number" min="5" max="200" step="1" value="15">
+        <button id="limitPlus" class="step-btn" type="button" aria-label="Increase visible messages">+</button>
+      </div>
+    </section>
+
+    <section class="row">
+      <label for="batchSize" class="label">Load more step</label>
+      <div class="stepper">
+        <button id="batchMinus" class="step-btn" type="button" aria-label="Decrease load more step">&minus;</button>
+        <input id="batchSize" class="step-input" type="number" min="5" max="50" step="1" value="10">
+        <button id="batchPlus" class="step-btn" type="button" aria-label="Increase load more step">+</button>
+      </div>
+    </section>
+
+    <section class="row">
+      <label for="quietMode" class="label label-check">
+        <input id="quietMode" type="checkbox" class="checkbox">
+        Quiet mode (no toasts)
+      </label>
+    </section>
+
+    <p id="reloadHint" class="hint hidden">Reload tab to apply</p>
+
+    <section class="stats" aria-label="Conversation stats">
+      <div id="statsValues" class="stats-grid">
+        <div class="stat">
+          <span id="statVisible" class="stat-value">&ndash;</span>
+          <span class="stat-name">Visible</span>
+        </div>
+        <div class="stat">
+          <span id="statHidden" class="stat-value">&ndash;</span>
+          <span class="stat-name">Hidden</span>
+        </div>
+        <div class="stat">
+          <span id="statTotal" class="stat-value">&ndash;</span>
+          <span class="stat-name">Total</span>
+        </div>
+      </div>
+      <p id="noConversation" class="stats-empty hidden">No conversation detected</p>
+    </section>
+
+    <section class="exports" aria-label="Export chat">
+      <button id="exportMd" class="btn btn-export" type="button" data-format="md" disabled>Markdown</button>
+      <button id="exportTxt" class="btn btn-export" type="button" data-format="txt" disabled>Text</button>
+      <button id="exportJson" class="btn btn-export" type="button" data-format="json" disabled>JSON</button>
+      <button id="exportPdf" class="btn btn-export" type="button" data-format="pdf" disabled>PDF</button>
+    </section>
+
+    <p id="exportError" class="error hidden"></p>
+
+    <section class="row">
+      <button id="reloadTab" class="btn btn-secondary" type="button">Reload tab</button>
+    </section>
+  </main>
+
+  <div id="notChatgpt" class="notice hidden">Open a ChatGPT chat</div>
+
+  <footer class="footer">
+    <a href="https://github.com/646826/speed-up-chatgpt" target="_blank" rel="noopener noreferrer" class="footer-link">Open source on GitHub</a>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
