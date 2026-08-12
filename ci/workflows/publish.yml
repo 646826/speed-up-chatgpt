@@ -1,24 +1,214 @@
-name: publish
+name: Chrome Web Store Release
+
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-  release:
-    types: [published]
+    inputs:
+      publish_type:
+        description: Upload only, submit for immediate publish, or stage after approval
+        required: true
+        type: choice
+        default: UPLOAD_ONLY
+        options: [UPLOAD_ONLY, DEFAULT_PUBLISH, STAGED_PUBLISH]
+      skip_review:
+        description: Attempt to skip review when the item is eligible
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: chrome-web-store-release
+  cancel-in-progress: false
+
 jobs:
-  chrome-web-store:
+  release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: chrome-web-store
+    env:
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - name: Build store zip
-        run: bash scripts/build.sh
-      - name: Upload & publish to Chrome Web Store
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve version and release mode
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_PUBLISH_TYPE: ${{ inputs.publish_type || 'UPLOAD_ONLY' }}
+          REQUESTED_SKIP_REVIEW: ${{ inputs.skip_review || false }}
+        shell: bash
         run: |
-          npm i -g chrome-webstore-upload-cli@3
-          chrome-webstore-upload \
-            --source dist/speed-up-chatgpt.zip \
-            --extension-id "${{ secrets.CHROME_EXTENSION_ID }}" \
-            --client-id "${{ secrets.CHROME_CLIENT_ID }}" \
-            --client-secret "${{ secrets.CHROME_CLIENT_SECRET }}" \
-            --refresh-token "${{ secrets.CHROME_REFRESH_TOKEN }}" \
-            --auto-publish
+          set -euo pipefail
+          version="$(node -p "JSON.parse(require('node:fs').readFileSync('manifest.json', 'utf8')).version")"
+          tag="v${version}"
+          tag_exists=false
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tag_exists=true
+          fi
+
+          should_upload=true
+          create_release=false
+          publish_type="${REQUESTED_PUBLISH_TYPE}"
+          skip_review="${REQUESTED_SKIP_REVIEW}"
+          if [[ "${EVENT_NAME}" == "push" ]]; then
+            publish_type="UPLOAD_ONLY"
+            skip_review="false"
+            if [[ "${tag_exists}" == "true" ]]; then
+              should_upload=false
+            else
+              create_release=true
+            fi
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "should_upload=${should_upload}" >> "${GITHUB_OUTPUT}"
+          echo "create_release=${create_release}" >> "${GITHUB_OUTPUT}"
+          echo "publish_type=${publish_type}" >> "${GITHUB_OUTPUT}"
+          echo "skip_review=${skip_review}" >> "${GITHUB_OUTPUT}"
+
+      - name: Report existing release
+        if: ${{ steps.release.outputs.should_upload != 'true' }}
+        run: echo "${{ steps.release.outputs.tag }} already exists; automated upload is idempotently skipped."
+
+      - name: Set up Node.js 24
+        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Run full verification
+        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in $(find background content export popup preview test -name '*.js'); do
+            node --check "$f"
+          done
+          node test/trimmer.test.js
+
+      - name: Build package
+        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        run: bash scripts/build.sh
+
+      - name: Upload workflow artifact
+        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: speed-up-chatgpt-${{ steps.release.outputs.version }}
+          path: dist/speed-up-chatgpt.zip
+          if-no-files-found: error
+
+      - id: auth_wif
+        name: Authenticate with Google Cloud via Workload Identity Federation
+        if: ${{ steps.release.outputs.should_upload == 'true' && env.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && env.GCP_SERVICE_ACCOUNT != '' }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          create_credentials_file: false
+
+      - id: auth_key
+        name: Generate access token from Service Account Key
+        if: ${{ steps.release.outputs.should_upload == 'true' && !(env.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && env.GCP_SERVICE_ACCOUNT != '') && env.GOOGLE_CREDENTIALS != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(node scripts/google-access-token.mjs)"
+          if [[ -z "${token}" ]]; then
+            echo "Failed to mint an access token from GOOGLE_CREDENTIALS." >&2
+            exit 1
+          fi
+          echo "access_token=${token}" >> "${GITHUB_OUTPUT}"
+
+      - id: resolve_token
+        name: Resolve access token
+        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${{ steps.auth_wif.outputs.access_token }}"
+          if [[ -z "${token}" ]]; then token="${{ steps.auth_key.outputs.access_token }}"; fi
+          if [[ -z "${token}" ]]; then
+            echo "Failed to obtain a Chrome Web Store API access token." >&2
+            exit 1
+          fi
+          echo "::add-mask::${token}"
+          echo "access_token=${token}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload to Chrome Web Store and verify delivery mode
+        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        env:
+          CWS_ACCESS_TOKEN: ${{ steps.resolve_token.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_PUBLISH_TYPE: ${{ steps.release.outputs.publish_type }}
+          CWS_SKIP_REVIEW: ${{ steps.release.outputs.skip_review }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/cws-release.sh dist/speed-up-chatgpt.zip 2>&1 | tee cws-release.log
+          grep -Fq 'Upload finished successfully.' cws-release.log
+          if [[ "${CWS_PUBLISH_TYPE}" == "UPLOAD_ONLY" ]]; then
+            grep -Fq 'Skipping publish step.' cws-release.log
+          fi
+
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+
+          const uploadOnly = process.env.CWS_PUBLISH_TYPE === 'UPLOAD_ONLY';
+          const evidence = {
+            schemaVersion: 1,
+            repository: process.env.GITHUB_REPOSITORY,
+            version: process.env.RELEASE_VERSION,
+            tag: process.env.RELEASE_TAG,
+            commit: process.env.GITHUB_SHA,
+            eventName: process.env.GITHUB_EVENT_NAME,
+            publishType: process.env.CWS_PUBLISH_TYPE,
+            skipReview: process.env.CWS_SKIP_REVIEW === 'true',
+            chromeWebStoreUpload: 'SUCCEEDED',
+            publishSubmission: uploadOnly ? 'SKIPPED' : 'REQUESTED',
+            verifiedLogMarkers: uploadOnly
+              ? ['Upload finished successfully.', 'Skipping publish step.']
+              : ['Upload finished successfully.'],
+            verifiedAt: new Date().toISOString()
+          };
+          writeFileSync('release-evidence.json', `${JSON.stringify(evidence, null, 2)}\n`);
+          NODE
+
+      - name: Upload verified delivery evidence
+        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: speed-up-chatgpt-release-evidence-${{ steps.release.outputs.version }}
+          path: |
+            release-evidence.json
+            cws-release.log
+          if-no-files-found: error
+
+      - name: Create GitHub Release after successful store upload
+        if: ${{ steps.release.outputs.should_upload == 'true' && steps.release.outputs.create_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh release create "${TAG}" dist/speed-up-chatgpt.zip release-evidence.json \
+            --target "${GITHUB_SHA}" \
+            --title "Speed Up ChatGPT ${VERSION}" \
+            --generate-notes
