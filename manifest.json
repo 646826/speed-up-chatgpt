@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Speed Up ChatGPT — Lag Fix & Chat Export",
+  "short_name": "Speed Up ChatGPT",
+  "version": "1.0.0",
+  "description": "Fix ChatGPT lag in long chats: render only the latest messages. Export chats to PDF, Markdown, TXT or JSON. Local & open source.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+  "background": { "service_worker": "background/service-worker.js" },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Speed Up ChatGPT"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content/config-bridge.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content/main-interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content/page-ui.js", "export/exporter.js"],
+      "css": ["content/page-ui.css"],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    }
+  ]
+}
