@@ -1,0 +1,23 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Syntax check
+        run: |
+          set -e
+          for f in $(find background content export popup preview test -name '*.js'); do
+            node --check "$f"
+          done
+      - name: Unit tests
+        run: node test/trimmer.test.js
+      - name: Build store zip
+        run: bash scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: speed-up-chatgpt-zip
+          path: dist/*.zip
