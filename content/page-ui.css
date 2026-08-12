@@ -1,0 +1,64 @@
+/* Speed Up ChatGPT — page UI styles.
+ * All classes are prefixed with suc- to avoid collisions with ChatGPT styles.
+ */
+
+.suc-hidden {
+  display: none !important;
+}
+
+.suc-load-more {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 8px 18px;
+  background: #1a1a1a;
+  color: #ececec;
+  border: 1px solid #10a37f;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.suc-load-more:hover {
+  background: #10a37f;
+  color: #ffffff;
+}
+
+.suc-load-more:focus-visible {
+  outline: 2px solid #10a37f;
+  outline-offset: 2px;
+}
+
+.suc-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  max-width: 340px;
+  padding: 10px 16px;
+  background: #1a1a1a;
+  color: #ececec;
+  border: 1px solid #2a2a2a;
+  border-left: 3px solid #10a37f;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.suc-toast.suc-toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
