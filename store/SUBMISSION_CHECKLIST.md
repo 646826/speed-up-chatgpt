@@ -1,57 +1,46 @@
 # Chrome Web Store — submission checklist
 
-## 0. Enable CI (once)
-- [ ] `bash scripts/setup-ci.sh && git push` — moves the ready-made workflows
-      from `ci/workflows/` into `.github/workflows/` (kept there so the repo
-      could be pushed without the OAuth `workflow` scope)
+## Done automatically
+- [x] CI enabled: `.github/workflows/ci.yml` — green on main
+- [x] Release pipeline enabled: `.github/workflows/publish.yml`
+      (WIF auth, UPLOAD_ONLY default, evidence, GitHub Release)
+- [x] GitHub environment `chrome-web-store` created
+- [x] Privacy policy public URL (gist):
+      https://gist.github.com/646826/e28a9cc9b54c88656c15ccc8e6d7fed5
+- [x] Store package built: `dist/speed-up-chatgpt.zip` (CI artifact
+      `speed-up-chatgpt-zip` on the latest CI run)
 
-## 1. Developer account
-- [x] Already registered (same publisher as page-to-md-pro)
-
-## 2. Create the item (manual, once)
-Automation updates EXISTING items — the first item must be created by hand:
+## 1. Create the item (manual, once — Google requires dashboard for the first item)
 - [ ] Developer dashboard → New item → upload `dist/speed-up-chatgpt.zip`
-      (`bash scripts/build.sh`, or the CI artifact `speed-up-chatgpt-zip`)
 - [ ] Note the new item's extension ID from the dashboard URL
 
-## 3. Store listing tab
-- [ ] Name / description: copy from `store/listing-en.md` (add RU localization
-      from `store/listing-ru.md` via "Add language")
+## 2. Store listing tab
+- [ ] Name / description: copy from `store/listing-en.md` (RU: `store/listing-ru.md`)
 - [ ] Category: Productivity
-- [ ] Icon: auto-taken from the package (icons/icon128.png)
-- [ ] Screenshots (1280x800): `screenshot-1.png`, `screenshot-2.png`
-      (store-assets bundle)
-- [ ] Small promo tile (440x280): `promo-tile-440x280.png`
-- [ ] Marquee (1400x560, optional): `promo-marquee-1400x560.png`
+- [ ] Screenshots 1280x800: `screenshot-1.png`, `screenshot-2.png` (store-assets bundle)
+- [ ] Small promo tile 440x280: `promo-tile-440x280.png`
+- [ ] Marquee 1400x560 (optional): `promo-marquee-1400x560.png`
 
-## 4. Privacy practices tab
+## 3. Privacy practices tab
 - [ ] Single purpose: "Speeds up long ChatGPT conversations by limiting how
       many messages are rendered; exports chats to local files."
 - [ ] Permission justification — storage: "Saves user preferences locally."
-- [ ] Permission justification — host (chatgpt.com / chat.openai.com):
-      "Core functionality: intercepts and trims the site's own conversation
-      API response before rendering; all processing is local."
+- [ ] Permission justification — host: "Intercepts and trims the site's own
+      conversation API response before rendering; all processing is local."
 - [ ] Data usage: certify NO data collection (matches PRIVACY.md)
-- [ ] Privacy policy URL: must be publicly accessible (raw PRIVACY.md after
-      making the repo public, or GitHub Pages)
+- [ ] Privacy policy URL: the gist URL above
 
-## 5. CI auto-publish (reuses the existing page-to-md-pro infrastructure)
-The release workflow (`ci/workflows/publish.yml`) is a port of the proven
-page-to-md-pro pipeline: Workload Identity Federation auth, `UPLOAD_ONLY`
-default, release evidence, GitHub Release after store upload success.
+## 4. Environment secrets (chrome-web-store)
+Same values as page-to-md-pro (GitHub UI never shows secret values — take them
+from your records / GCP Console):
+- [ ] `GCP_WORKLOAD_IDENTITY_PROVIDER` — GCP Console → IAM → Workload Identity Pools
+- [ ] `GCP_SERVICE_ACCOUNT` — service account email with chromewebstore scope
+- [ ] `CWS_PUBLISHER_ID` — visible in the developer dashboard URL
+- [ ] `CWS_EXTENSION_ID` — the NEW item's ID (step 1)
+- [ ] (fallback) `GOOGLE_CREDENTIALS` — SA key JSON
 
-Create a GitHub **environment** named `chrome-web-store` in this repo and add
-the SAME secrets you already use for page-to-md-pro:
-- [ ] `GCP_WORKLOAD_IDENTITY_PROVIDER` — same value as in page-to-md-pro
-- [ ] `GCP_SERVICE_ACCOUNT` — same service account (it already has the
-      chromewebstore scope authorized)
-- [ ] `CWS_PUBLISHER_ID` — same publisher ID as page-to-md-pro
-- [ ] `CWS_EXTENSION_ID` — the NEW item's ID (from step 2)
-- [ ] (fallback instead of WIF) `GOOGLE_CREDENTIALS` — same SA key JSON
+After secrets are set: rerun the failed "Chrome Web Store Release" run —
+the verified package uploads automatically (UPLOAD_ONLY).
 
-Modes: push to `main` with a bumped `version` in manifest.json → verified
-`UPLOAD_ONLY` upload + GitHub Release; manual dispatch → `UPLOAD_ONLY` /
-`STAGED_PUBLISH` / `DEFAULT_PUBLISH`.
-
-## 6. Submit
-- [ ] Submit for review in the dashboard (typically 1–3 days)
+## 5. Submit
+- [ ] Submit for review (typically 1–3 days)
