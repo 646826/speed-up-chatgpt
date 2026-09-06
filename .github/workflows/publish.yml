@@ -71,6 +71,11 @@ jobs:
             fi
           fi
 
+          # Owner-approved release only. Other versions retain upload-only defaults.
+          if [[ "${EVENT_NAME}" == "push" && "${create_release}" == "true" && "${version}" == "1.0.1" ]]; then
+            publish_type="DEFAULT_PUBLISH"
+          fi
+
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "should_upload=${should_upload}" >> "${GITHUB_OUTPUT}"
@@ -96,7 +101,7 @@ jobs:
           for f in $(find background content export popup preview test -name '*.js'); do
             node --check "$f"
           done
-          node test/trimmer.test.js
+          node --test test/*.test.js
 
       - name: Build package
         if: ${{ steps.release.outputs.should_upload == 'true' }}
@@ -150,6 +155,7 @@ jobs:
           echo "access_token=${token}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload to Chrome Web Store and verify delivery mode
+        id: store_upload
         if: ${{ steps.release.outputs.should_upload == 'true' }}
         env:
           CWS_ACCESS_TOKEN: ${{ steps.resolve_token.outputs.access_token }}
@@ -191,6 +197,37 @@ jobs:
           writeFileSync('release-evidence.json', `${JSON.stringify(evidence, null, 2)}\n`);
           NODE
 
+      - name: Read back Chrome Web Store revision status
+        if: ${{ steps.store_upload.outcome == 'success' }}
+        env:
+          CWS_ACCESS_TOKEN: ${{ steps.resolve_token.outputs.access_token }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          const env = process.env;
+          const url = `https://chromewebstore.googleapis.com/v2/publishers/${env.CWS_PUBLISHER_ID}/items/${env.CWS_EXTENSION_ID}:fetchStatus`;
+          const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${env.CWS_ACCESS_TOKEN}` },
+            signal: AbortSignal.timeout(30000)
+          });
+          if (!response.ok) throw new Error(`Store status read failed: HTTP ${response.status}`);
+          const data = await response.json();
+          const status = {
+            observedAt: new Date().toISOString(),
+            itemId: data.itemId,
+            published: data.publishedItemRevisionStatus || null,
+            submitted: data.submittedItemRevisionStatus || null,
+            takenDown: data.takenDown === true,
+            warned: data.warned === true
+          };
+          writeFileSync('cws-status.json', JSON.stringify(status, null, 2) + '\n');
+          console.log(JSON.stringify(status, null, 2));
+          NODE
+
       - name: Upload verified delivery evidence
         if: ${{ steps.release.outputs.should_upload == 'true' }}
         uses: actions/upload-artifact@v7
@@ -199,6 +236,7 @@ jobs:
           path: |
             release-evidence.json
             cws-release.log
+            cws-status.json
           if-no-files-found: error
 
       - name: Create GitHub Release after successful store upload
@@ -208,7 +246,7 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          gh release create "${TAG}" dist/speed-up-chatgpt.zip release-evidence.json \
+          gh release create "${TAG}" dist/speed-up-chatgpt.zip release-evidence.json cws-status.json \
             --target "${GITHUB_SHA}" \
             --title "Speed Up ChatGPT ${VERSION}" \
-            --generate-notes
+            --notes-file "docs/releases/${VERSION}.md"

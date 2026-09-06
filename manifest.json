@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Speed Up ChatGPT — Lag Fix & Chat Export",
   "short_name": "Speed Up ChatGPT",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fix ChatGPT lag in long chats: render only the latest messages. Export chats to PDF, Markdown, TXT or JSON. Local & open source.",
   "permissions": ["storage"],
   "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
