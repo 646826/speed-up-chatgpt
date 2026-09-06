@@ -38,7 +38,7 @@
     } catch (e) {
       m = null;
     }
-    return m ? m[1] : null;
+    return m ? m[1].toLowerCase() : null;
   }
 
   function currentChatId() {
@@ -185,8 +185,15 @@
     if (event.source !== window) return;
     var data = event.data;
     if (!data || data.source !== "suc" || data.type !== "conversation") return;
-    window.__sucLastConversation = data.payload || null;
-    lastStats = (data.payload && data.payload.stats) || null;
+    // A prior request may finish after SPA navigation. Correlate the result
+    // before enabling export or showing stats for the page currently open.
+    checkUrlChanged();
+    var payload = data.payload;
+    var chatId = currentChatId();
+    if (!chatId || !payload || typeof payload.conversationId !== "string" ||
+        payload.conversationId.toLowerCase() !== chatId) return;
+    window.__sucLastConversation = payload;
+    lastStats = payload.stats || null;
     updateButton();
     if (lastStats && lastStats.hidden > 0) {
       loadSettings(function () {
@@ -199,9 +206,11 @@
 
   chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     if (!msg || typeof msg.type !== "string") return false;
+    checkUrlChanged();
 
     if (msg.type === "suc:getStats") {
       loadSettings(function (s) {
+        checkUrlChanged(); // The URL can change while storage is being read.
         var st = lastStats || {};
         sendResponse({
           enabled: s.enabled,
