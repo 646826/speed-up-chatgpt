@@ -148,8 +148,19 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
 
     function requestUrl(input) {
       try {
-        if (typeof input === "string") return input;
-        if (input && input.url) return String(input.url);
+        let raw;
+        if (typeof input === "string") raw = input;
+        else if (typeof URL !== "undefined" && input instanceof URL) raw = input.href;
+        else if (typeof Request !== "undefined" && input instanceof Request) raw = input.url;
+        else return "";
+
+        // Normalize only for matching. Fetch still receives the original input,
+        // including its query, headers, credentials, signal, and Request body.
+        const base = typeof document !== "undefined" && document.baseURI
+          ? document.baseURI
+          : window.location.href;
+        const url = new URL(raw, base);
+        return url.origin + url.pathname;
       } catch (err) {
         // fall through
       }
