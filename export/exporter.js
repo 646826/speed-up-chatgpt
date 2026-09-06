@@ -10,19 +10,18 @@
   function extractMessages(json) {
     if (!json || !json.mapping || !json.current_node) return [];
     var mapping = json.mapping;
-    var maxSteps = Object.keys(mapping).length + 1;
-    var seen = {};
+    var seen = new Set();
     var path = [];
-    var node = mapping[json.current_node];
-    var steps = 0;
+    var nodeId = json.current_node;
 
-    // Walk from current_node up to the root, then reverse -> root..current.
-    while (node && steps <= maxSteps) {
-      if (seen[node.id]) break; // cycle guard
-      seen[node.id] = true;
+    // Mapping keys are the graph identity; embedded node.id can be absent or
+    // duplicated. Only follow own entries, never Object.prototype properties.
+    while (nodeId != null && Object.prototype.hasOwnProperty.call(mapping, nodeId) && !seen.has(nodeId)) {
+      seen.add(nodeId);
+      var node = mapping[nodeId];
+      if (!node || typeof node !== "object") break;
       path.push(node);
-      node = node.parent ? mapping[node.parent] : null;
-      steps++;
+      nodeId = node.parent;
     }
     path.reverse();
 
@@ -46,11 +45,12 @@
 
   function slugify(title) {
     var s = String(title || "conversation")
+      .normalize("NFKC")
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/[^\p{L}\p{N}\p{M}]+/gu, "-")
       .replace(/^-+|-+$/g, "");
     if (!s) s = "conversation";
-    return s.slice(0, 40);
+    return Array.from(s).slice(0, 40).join("");
   }
 
   function todayStamp() {
