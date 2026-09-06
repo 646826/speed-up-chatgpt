@@ -1,12 +1,17 @@
 name: ci
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with: { node-version: 24, package-manager-cache: false }
       - name: Syntax check
         run: |
           set -e
@@ -17,7 +22,8 @@ jobs:
         run: node --test test/*.test.js
       - name: Build store zip
         run: bash scripts/build.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: speed-up-chatgpt-zip
           path: dist/*.zip
+          if-no-files-found: error
