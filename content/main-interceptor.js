@@ -195,7 +195,7 @@ if (typeof window !== "undefined" && typeof window.fetch === "function") {
           {
             source: "suc",
             type: "conversation",
-            payload: { json: data, stats: result.stats },
+            payload: { conversationId: url.slice(url.lastIndexOf("/") + 1), json: data, stats: result.stats },
           },
           "*"
         );
