@@ -72,7 +72,7 @@ jobs:
           fi
 
           # Owner-approved release only. Other versions retain upload-only defaults.
-          if [[ "${EVENT_NAME}" == "push" && "${create_release}" == "true" && "${version}" == "1.0.1" ]]; then
+          if [[ "${EVENT_NAME}" == "push" && "${create_release}" == "true" && "${version}" == "1.0.2" ]]; then
             publish_type="DEFAULT_PUBLISH"
           fi
 
@@ -198,7 +198,7 @@ jobs:
           NODE
 
       - name: Read back Chrome Web Store revision status
-        if: ${{ steps.store_upload.outcome == 'success' }}
+        if: ${{ always() && steps.resolve_token.outcome == 'success' }}
         env:
           CWS_ACCESS_TOKEN: ${{ steps.resolve_token.outputs.access_token }}
           CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
@@ -229,7 +229,7 @@ jobs:
           NODE
 
       - name: Upload verified delivery evidence
-        if: ${{ steps.release.outputs.should_upload == 'true' }}
+        if: ${{ always() && steps.resolve_token.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: speed-up-chatgpt-release-evidence-${{ steps.release.outputs.version }}

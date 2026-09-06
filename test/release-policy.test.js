@@ -7,7 +7,7 @@ const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const workflowPath = join(__dirname, '../.github/workflows/publish.yml');
 
-const approvedVersion = '1.0.1';
+const approvedVersion = '1.0.2';
 const workflow = readFileSync(workflowPath, 'utf8');
 const block = workflow.split('      - name: Resolve version and release mode\n')[1]?.split('\n      - name:')[0];
 assert.ok(block, 'the actual release resolver must be present');
