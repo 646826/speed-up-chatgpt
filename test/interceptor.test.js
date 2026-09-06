@@ -118,7 +118,10 @@ test("disabled acceleration keeps the original response and full export", async 
 });
 
 test("malformed JSON fails open without consuming the original response", async () => {
-  const env = loadInterceptor({ response: new Response("not json", { headers: { "content-type": "application/json" } } }) });
+  const invalidResponse = new Response("not json", {
+    headers: { "content-type": "application/json" },
+  });
+  const env = loadInterceptor({ response: invalidResponse });
   const response = await env.window.fetch(absoluteUrl);
   assert.equal(response, env.response);
   assert.equal(await response.text(), "not json");
