@@ -13,19 +13,21 @@
   var toast = null;
   var toastTimer = null;
   var currentUrl = location.href;
+  var loadMorePending = false;
 
   /* ---------------- settings ---------------- */
 
   function loadSettings(cb) {
     try {
       chrome.storage.local.get("suc_settings", function (res) {
-        if (!chrome.runtime.lastError) {
+        var error = chrome.runtime.lastError;
+        if (!error) {
           settings = Object.assign({}, DEFAULTS, (res && res.suc_settings) || {});
         }
-        if (cb) cb(settings);
+        if (cb) cb(settings, error);
       });
     } catch (e) {
-      if (cb) cb(settings);
+      if (cb) cb(settings, e);
     }
   }
 
@@ -69,16 +71,40 @@
   }
 
   function onLoadMoreClick() {
-    loadSettings(function (s) {
+    if (loadMorePending) return;
+    var chatId = currentChatId();
+    if (!chatId) return;
+    loadMorePending = true;
+    if (button) button.disabled = true;
+
+    function finish(error) {
+      loadMorePending = false;
+      if (button) {
+        button.disabled = false;
+        if (error && currentChatId() === chatId) {
+          button.textContent = "Could not save settings. Click to retry.";
+        }
+      }
+    }
+
+    loadSettings(function (s, error) {
+      if (error || currentChatId() !== chatId) {
+        finish(error);
+        return;
+      }
       var next = Object.assign({}, s, { messageLimit: s.messageLimit + s.batchSize });
       try {
         chrome.storage.local.set({ suc_settings: next }, function () {
+          var saveError = chrome.runtime.lastError;
+          finish(saveError);
+          // A failed save cannot reveal older messages. Nor should a late save
+          // reload a different conversation opened while storage was pending.
+          if (saveError || currentChatId() !== chatId) return;
           savePendingScroll();
           location.reload();
         });
       } catch (e) {
-        savePendingScroll();
-        location.reload();
+        finish(e);
       }
     });
   }
