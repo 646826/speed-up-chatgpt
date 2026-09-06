@@ -45,6 +45,7 @@ jobs:
         id: release
         env:
           EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
           REQUESTED_PUBLISH_TYPE: ${{ inputs.publish_type || 'UPLOAD_ONLY' }}
           REQUESTED_SKIP_REVIEW: ${{ inputs.skip_review || false }}
         shell: bash
@@ -64,7 +65,14 @@ jobs:
           if [[ "${EVENT_NAME}" == "push" ]]; then
             publish_type="UPLOAD_ONLY"
             skip_review="false"
-            if [[ "${tag_exists}" == "true" ]]; then
+            # A code-only push must not retry an untagged release already blocked
+            # by Store review. Explicit manual retries remain available.
+            version_changed=true
+            if [[ -n "${BEFORE_SHA:-}" && ! "${BEFORE_SHA}" =~ ^0+$ ]]; then
+              previous_version="$(git show "${BEFORE_SHA}:manifest.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s).version||''))")"
+              if [[ "${previous_version}" == "${version}" ]]; then version_changed=false; fi
+            fi
+            if [[ "${tag_exists}" == "true" || "${version_changed}" != "true" ]]; then
               should_upload=false
             else
               create_release=true
@@ -83,9 +91,9 @@ jobs:
           echo "publish_type=${publish_type}" >> "${GITHUB_OUTPUT}"
           echo "skip_review=${skip_review}" >> "${GITHUB_OUTPUT}"
 
-      - name: Report existing release
+      - name: Report skipped automatic delivery
         if: ${{ steps.release.outputs.should_upload != 'true' }}
-        run: echo "${{ steps.release.outputs.tag }} already exists; automated upload is idempotently skipped."
+        run: echo "No new untagged manifest version; automatic Store delivery skipped. Use workflow_dispatch for an explicit retry."
 
       - name: Set up Node.js 24
         if: ${{ steps.release.outputs.should_upload == 'true' }}
