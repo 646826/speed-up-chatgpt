@@ -1,9 +1,6 @@
 // Speed Up ChatGPT — config bridge (isolated world, document_start)
-// Bridges chrome.storage.local (extension settings) into the page context:
-//  - writes the current settings to localStorage["suc_config"] so the
-//    MAIN-world interceptor can read its initial config synchronously
-//  - forwards later setting changes to MAIN world via a CustomEvent
-
+// Cache settings for the next navigation and notify an interceptor that may
+// already be running: chrome.storage callbacks are asynchronous.
 "use strict";
 
 (function () {
@@ -13,34 +10,35 @@
     batchSize: 10,
     quietMode: false,
   };
+  let changedSinceRead = false;
 
-  function withDefaults(settings) {
-    return Object.assign({}, SUC_DEFAULT_SETTINGS, settings || {});
+  function publish(settings) {
+    const serialized = JSON.stringify(Object.assign({}, SUC_DEFAULT_SETTINGS, settings || {}));
+    try {
+      localStorage.setItem("suc_config", serialized);
+    } catch (err) {
+      // The live event still works when page storage is blocked.
+    }
+    window.dispatchEvent(new CustomEvent("suc:set-config", { detail: serialized }));
   }
 
-  // Initial settings: merge stored values with defaults, then expose them
-  // to the MAIN-world script before it patches window.fetch.
-  chrome.storage.local.get("suc_settings", (data) => {
-    const settings = withDefaults(data && data.suc_settings);
-    try {
-      localStorage.setItem("suc_config", JSON.stringify(settings));
-    } catch (err) {
-      // localStorage may be unavailable (e.g. blocked storage); the
-      // interceptor falls back to defaults in that case.
-    }
-  });
-
-  // Live updates: popup changes settings -> broadcast into the page.
+  // Subscribe before reading so a delayed snapshot cannot roll back a newer
+  // setting. Deleting the storage key also counts as a change (reset defaults).
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes || !changes.suc_settings) return;
-    const newSettings = withDefaults(changes.suc_settings.newValue);
-    try {
-      localStorage.setItem("suc_config", JSON.stringify(newSettings));
-    } catch (err) {
-      // Ignore storage failures; the CustomEvent still delivers the update.
-    }
-    window.dispatchEvent(
-      new CustomEvent("suc:set-config", { detail: JSON.stringify(newSettings) })
-    );
+    changedSinceRead = true;
+    publish(changes.suc_settings.newValue);
   });
+
+  try {
+    chrome.storage.local.get("suc_settings", (data) => {
+      // Always consume lastError, even when ignoring an obsolete snapshot.
+      const error = chrome.runtime.lastError;
+      if (error || changedSinceRead) return;
+      publish(data && data.suc_settings);
+    });
+  } catch (err) {
+    // An invalidated extension context must not break the page. The main-world
+    // interceptor retains its previously cached settings or its defaults.
+  }
 })();
